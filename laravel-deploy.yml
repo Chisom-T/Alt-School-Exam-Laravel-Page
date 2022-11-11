@@ -1,0 +1,77 @@
+---
+- hosts: all
+  become: true
+  tasks:
+    - name: Make sure the remote app root exists and has the right permissions
+      file:
+        path: "{{ remote_www_root }}/{{ app_root_dir }}"
+        state: directory
+        mode: '0755'
+        owner: "{{ remote_user }}"
+        group: "{{ remote_user }}"
+
+    - name: Rsync application files to the remote server
+      synchronize:
+        src: "application/{{ app_root_dir }}"
+        dest: "{{ remote_www_root }}"
+        rsync_opts:
+          - "--no-motd"
+          - "--exclude=.git,vendor,tests,storage/logs/*,storage/framework/sessions/*,storage/framework/cache/*"
+    - name: Install setfacl
+      command: apt-get install acl
+
+    - name: Set up additional directory permissions for www-data user on storage folder
+      acl:
+        path: "{{ remote_www_root }}/{{ app_root_dir }}/storage/"
+        entry: group:www-data:rwX
+        recursive: yes
+        state: present
+
+    - name: Set up additional directory permissions for www-data user on bootstrap/cache folder
+      acl:
+        path: "{{ remote_www_root }}/{{ app_root_dir }}/bootstrap/cache/"
+        entry: group:www-data:rwX
+        recursive: yes
+        state: present
+
+    - name: Set up .env file
+      template:
+        src: laravel-env.j2
+        dest: "{{ remote_www_root }}/{{ app_root_dir }}/.env"
+
+    - name: Install Dependencies with Composer
+      become: false
+      composer:
+        command: install
+        working_dir: "{{ remote_www_root }}/{{ app_root_dir }}"
+      tags: [ 'composer:install' ]
+
+    - name: Generate app key
+      command: "/usr/bin/php {{ remote_www_root }}/{{ app_root_dir }}/artisan key:generate"
+      tags: [ 'laravel', 'artisan:key' ]
+
+    - name: Set up app storage link
+      command: "/usr/bin/php {{ remote_www_root }}/{{ app_root_dir }}/artisan storage:link"
+      tags: [ 'laravel', 'artisan:storage' ]
+
+    - name: Run the php artisan commands
+      command: chdir=/var/www/myapp {{ item }}
+      with_items:
+        - php artisan config:cache
+        - php artisan migrate:fresh
+      become: true
+
+    - name: Run Migrations + Seeders
+      command: "/usr/bin/php {{ remote_www_root }}/{{ app_root_dir }} migrate --seed"
+      tags: [ 'laravel', 'artisan:migrate' ]
+
+    - name: Enable the Apache rewrite & activate Laravel virtual host
+      command: "{{ item }}"
+      with_items:
+        - a2enmod rewrite
+        - a2dissite 000-default.conf
+        - a2ensite apache2.conf
+      become: true
+    
+    - name: Restart apache web server
+      ansible.builtin.command: systemctl reload apache2

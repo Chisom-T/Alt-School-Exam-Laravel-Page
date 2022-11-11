@@ -1,0 +1,63 @@
+---
+- name: Install apache2
+  apt: name=apache2 update_cache=yes state=latest
+
+# Apache2 Configuration
+- name: Sets Apache2 conf file
+  template:
+    src: "apache2.conf"
+    dest: "/etc/apache2/sites-available/{{ http_conf }}"
+
+- name: Enables new site
+  file:
+    src: "/etc/apache2/sites-available/{{ http_conf }}"
+    dest: "/etc/apache2/sites-enabled/{{ http_conf }}"
+    state: link
+  notify: Reload apache2
+
+- name: Removes "default" site
+  file:
+    path: "/etc/apache2/sites-enabled/default"
+    state: absent
+  notify: Reload apache2
+
+
+- name: Install UFW
+  apt:
+    name: ufw
+    state: present
+
+- name: Allow Apache
+  ufw:
+    name: Apache
+    rule: allow
+
+- name: Allow OpenSSH
+  ufw: name=OpenSSH rule=allow
+
+- name: Allow port 22 (SSH)
+  ufw:
+    port: '22'
+    proto: tcp
+    rule: allow
+
+- name: Allow port 80 (HTTP)
+  ufw:
+    port: '80'
+    proto: tcp
+    rule: allow
+
+- name: Allow port 443 (HTTPs)
+  ufw:
+    port: '443'
+    rule: allow
+
+- name: Allow port 3306 (MySQL)
+  ufw:
+    port: '3306'
+    rule: allow
+
+- name: Allow port 5432 (PostgreSQL)
+  ufw:
+    port: '5432'
+    rule: allow

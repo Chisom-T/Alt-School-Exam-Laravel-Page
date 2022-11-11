@@ -1,0 +1,26 @@
+---
+become: true
+
+remote_user: ubuntu
+
+# MySQL Setup
+mysql_app_db: mydb
+mysql_app_user: myuser
+mysql_app_pass: admin123
+
+# Web Server Setup
+http_host: "{{ ansible_facts.eth0.ipv4.address }}"
+remote_www_root: /var/www
+app_root_dir: myapp
+document_root: "{{ remote_www_root }}/{{ app_root_dir }}/public"
+
+# Laravel Env Variables
+app_name: myapp
+app_env: local
+app_debug: true
+app_url: "http://{{ http_host }}"
+db_host: localhost
+db_port: 3306
+db_database: "{{ mysql_app_db }}"
+db_user: "{{ mysql_app_user }}"
+db_pass: "{{ mysql_app_pass }}"
